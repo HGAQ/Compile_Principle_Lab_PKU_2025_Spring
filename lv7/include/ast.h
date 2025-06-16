@@ -4,110 +4,47 @@
 #include <string>
 #include <iostream>
 #include <vector>
-#include <stack>
-#include <deque>
 #include <sstream>
-#include <algorithm>
 #include <unordered_map>
-#include <map>
 using namespace std;
 
 const std::string _TEST_ = "-koopa";
 const std::string _RSC5_ = "-riscv";
 #define _IMM_ 0
 #define _REG_ 1
-#define _VOID_ -1
-#define _INIT_ARR_ 2
-#define _INIT_PTR_ARR_ 3
-#define _PTR_ 4
-
-#define _NONE_ -1
-#define _VAL_ 0
 #define _VAR_ 1
-#define _FUN_ 2
-#define _ARR_VAR_ 3
-#define _PTR_ARR_VAR_ 4
-
+#define _VAL_ 0
+#define _NONE_ -1
 
 class record
 {
   public:
     static int curr_idx;
-    static int curr_par_idx;
     int idx; //i'm lazy, its imm val or reg idx!
     int type; // == 0 : imm == 1 : Reg
     int returned;
     int cycled;
-    string name_par; //i'm lazy too, it sometimes represent type as well
-    vector<pair<vector<int>,string>>* psr_map; // 新增：存储初始化列表
-    vector<int>* pdim;
-
     record(){
       idx = -1;
       type = _IMM_;
       returned = 0;
       cycled = 0;
-      name_par = "";
     }
     record(int type_, int idx_){
       if(type_ == _REG_){
         record::curr_idx += 1;
         idx = curr_idx;
         type = type_;
-        name_par = "";
       }
       else if(type_ == _IMM_){
         type = type_ ;
         idx = idx_;
-        name_par = "";
-      }
-      else if(type_ == _PTR_){
-        record::curr_idx += 1;
-        idx = curr_idx;
-        type = type_;
-        name_par = "";
       }
       returned = 0;
       cycled = 0;
-    }
-    record(string str, int type_){
-      name_par = str;
-      idx = -1;
-      if (type_ == 0){
-        type = _IMM_;
-      }
-      else if (type_ == -1){
-        type = _VOID_;
-      }
-      else if(type_ == 1 || type_ == 2){
-        type = _INIT_PTR_ARR_;
-        pdim = new vector<int>();
-      }
-      returned = 0;
-      cycled = 0;
-    }
-
-    record(string str, int type_, vector<int>* pdim_size){
-      name_par = str;
-      idx = -1;
-      if(type_ == 1){
-        type = _INIT_PTR_ARR_;
-      }
-      pdim = pdim_size;
-      returned = 0;
-      cycled = 0;
-    }
-
-    record(vector<pair<vector<int>,string>>* plist){
-      type = _INIT_ARR_; // 新增类型标记
-      psr_map = plist;
-      idx = -1;
-      returned = 0;
-      cycled = 0;
-      name_par = "";
     }
     std::string print(){
-      if (type == _REG_ || type == _PTR_){
+      if (type == _REG_){
         return "%" + std::to_string(idx);
       }
       else if(type == _IMM_){
@@ -122,9 +59,6 @@ class symbol{
   public:
     int type; // == 0 : imm == 1 : Reg
     int val;
-    int dim;
-    string functype;
-
     symbol(){
       type = _NONE_;
       val = 0;
@@ -132,18 +66,6 @@ class symbol{
     symbol(int type_, int val_){
       val = val_;
       type = type_;
-    }
-    //array
-    symbol(int type_, int val_, int dims){
-      val = val_;
-      type = type_;
-      dim  = dims;
-    }
-    //function
-    symbol(int type_, string functype_){
-      val = 0;
-      type = _FUN_;
-      functype = functype_;
     }
 };
 
@@ -172,10 +94,7 @@ class symboltable{
         return std::to_string(map[str].val);
       }
       else if(map[str].type == _VAR_){
-        return "@_loc_" + str + "_p" + std::to_string(curr_idx) ;
-      }
-      else if(map[str].type == _ARR_VAR_ || map[str].type == _PTR_ARR_VAR_){
-        return "@_loc_arr_" + str + "_p" + std::to_string(curr_idx) ; // + std::to_string(curr_idx);
+        return str + std::to_string(curr_idx);
       }
       else{
         return "";
@@ -187,50 +106,6 @@ class symboltable{
       curr_idx = idx;
     }
 };
-
-class globaltable{
-  public:
-    std::unordered_map<std::string, symbol> map;
-
-    symbol Find(std::string sym){
-        for(auto& k: map){
-          //cout << k.first;
-          if(k.first == sym){
-            return k.second;
-          }
-        }
-        return symbol();
-      }
-
-    void Add(std::string str, symbol sym){
-      map.insert(pair<std::string, symbol>(str, sym));
-    }
-
-    std::string Print(std::string str){
-      if(map[str].type == _VAL_){
-        return std::to_string(map[str].val);
-      }
-      else if(map[str].type == _VAR_){
-        //global var
-        return "@_glb_" + str;
-      }
-      else if(map[str].type == _FUN_){
-        //global func
-        return "@" + str;
-      }
-      else if(map[str].type == _ARR_VAR_){
-        return "@_glb_arr_" + str  ; // + std::to_string(curr_idx);
-      }
-      else{
-        return "";
-      }
-    }
-
-    globaltable(){
-      map.clear();
-    }
-};
-
 
 class symboltablemap{
   public:
@@ -350,19 +225,9 @@ class BaseAST {
 class CompUnitAST : public BaseAST {
  public:
   // 用智能指针管理对象
-  unique_ptr<vector<unique_ptr<BaseAST>>> vfunc_def;
+  std::unique_ptr<BaseAST> func_def;
   record Dump(std::stringstream &cstr)const override ;
 };
-
-class DFuncDefAST : public BaseAST {
- public:
-  // 用智能指针管理对象
-  unique_ptr<BaseAST> func_def;
-  unique_ptr<BaseAST> decl;
-  int type;
-  record Dump(std::stringstream &cstr)const override ;
-};
-
 
 // FuncDef 也是 BaseAST
 class FuncDefAST : public BaseAST {
@@ -370,19 +235,9 @@ class FuncDefAST : public BaseAST {
   std::unique_ptr<BaseAST> func_type;
   std::string ident;
   std::unique_ptr<BaseAST> block;
-  unique_ptr<vector<unique_ptr<BaseAST>>> vfunc_param;
-  int type;
   record Dump(std::stringstream &cstr)const override ;
 };
 
-class FuncFParamAST : public BaseAST {
- public:
-  std::string ident;//it is a type
-  std::unique_ptr<BaseAST> btype;
-  int type;
-  unique_ptr<vector<unique_ptr<BaseAST>>> vconst_def;
-  record Dump(std::stringstream &cstr)const override;
-};
 
 class FuncTypeAST : public BaseAST {
  public:
@@ -427,18 +282,16 @@ class VarDeclAST : public BaseAST {
   record Dump(std::stringstream &cstr)const override;
 };
 
-//class BTypeAST : public BaseAST {
-// public:
-//  std::string btype;
-//  record Dump(std::stringstream &cstr)const override;
-//};
+class BTypeAST : public BaseAST {
+ public:
+  std::string btype;
+  record Dump(std::stringstream &cstr)const override;
+};
 
 class ConstDefAST : public BaseAST {
  public:
   std::unique_ptr<BaseAST> const_initval;//it is a type
-  unique_ptr<vector<unique_ptr<BaseAST>>> vconstexp;
   std::string ident;
-  int type;
   record Dump(std::stringstream &cstr)const override;
 };
 
@@ -446,7 +299,6 @@ class VarDefAST : public BaseAST {
  public:
   std::unique_ptr<BaseAST> initval;//it is a type
   std::string ident;
-  unique_ptr<vector<unique_ptr<BaseAST>>> vconstexp;
   int type;
   record Dump(std::stringstream &cstr)const override;
 };
@@ -454,16 +306,12 @@ class VarDefAST : public BaseAST {
 class ConstInitValAST : public BaseAST {
  public:
   std::unique_ptr<BaseAST> const_exp;//it is a type
-  unique_ptr<vector<unique_ptr<BaseAST>>> vconst_initval;
-  int type;
   record Dump(std::stringstream &cstr)const override;
 };
 
 class InitValAST : public BaseAST {
  public:
   std::unique_ptr<BaseAST> exp;//it is a type
-  unique_ptr<vector<unique_ptr<BaseAST>>> vinitval;
-  int type;
   record Dump(std::stringstream &cstr)const override;
 };
 
@@ -488,8 +336,6 @@ class StmtAST : public BaseAST {
 class LValAST : public BaseAST {
  public:
   std::string ident;
-  unique_ptr<vector<unique_ptr<BaseAST>>> vexp;
-  int type;
   record Dump(std::stringstream &cstr)const override;
 };
 
@@ -505,8 +351,6 @@ class UExpAST : public BaseAST {
   std::unique_ptr<BaseAST> pexp;
   std::string uop;
   std::unique_ptr<BaseAST> uexp;
-  std::unique_ptr<std::vector<std::unique_ptr<BaseAST>>> vfunc_param;
-  string ident;
   record Dump(std::stringstream &cstr)const override;
 };
 
@@ -573,9 +417,7 @@ class RExpAST : public BaseAST {
   record Dump(std::stringstream &cstr)const override;
 };
 
-void proc(vector<pair<vector<int>,string>>& result_map, vector<unique_ptr<BaseAST>>* vconst_initval, vector<int> index_vect, std::stringstream  &cstr);
-void proc1(vector<pair<vector<int>,string>>& result_map, unique_ptr<vector<unique_ptr<BaseAST>>> vinitval, string index_vect, std::stringstream  &cstr);
-vector<pair<int, string>> translate(record init_rec, int total_size, vector<int> dim_sizes);
+
 
 //class NumberAST : public BaseAST {
 // public:
